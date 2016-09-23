@@ -1,0 +1,139 @@
+#' Repeatability Estimation for Gaussian and Non-Gaussian Data
+#' 
+#' A wrapper function for (adjusted) repeatability estimation from generalized linear mixed-effects 
+#' models fitted by restricted maximum likelihood (REML). Calls 
+#' specialised functions depending of the choice of datatype and method.
+#' 
+#' @param formula Formula as used e.g. by \link{lmer}. The grouping factor(s) of
+#'        interest needs to be included as a random effect, e.g. '(1|groups)'.
+#'        Covariates and additional random effects can be included to estimate adjusted 
+#'        repeatabilities.
+#' @param grname A character string or vector of character strings giving the
+#'        name(s) of the grouping factor(s), for which the repeatability should
+#'        be estimated. Spelling needs to match the random effect names as given in \code{formula} 
+#'        and terms have to be set in quotation marks. The reseved terms "Residual", 
+#'        "Overdispersion" and "Fixed" allow the estimation of oversipersion variance, residual 
+#'        variance and variance explained by fixed effects, respectively.
+#' @param data A dataframe that contains the variables included in the \code{formula}
+#'        and \code{grname} arguments.
+#' @param datatype Character string specifying the data type ('Gaussian', 
+#'        'Binary', 'Proportion', 'Poisson'). 
+#' @param link Character string specifying the link function. Ignored for 
+#'        'Gaussian' datatype.
+#' @param CI Width of the required confidence interval between 0 and 1 (defaults to 
+#'        0.95).
+#' @param nboot Number of parametric bootstraps for interval estimation 
+#'        (defaults to 1000). Larger numbers of bootstraps give a better
+#'        asymtotic CI, but may be time-consuming. Bootstrapping can be switch off by setting 
+#'        \code{nboot = 0}.
+#' @param npermut Number of permutations used when calculating asymptotic p-values 
+#'        (defaults to 0). Larger numbers of permutations give a better
+#'        asymtotic p-values, but may be time-consuming (in particular when multiple grouping factors
+#'        are specified). Permutaton tests can be switch off by setting \code{npermut = 0}. 
+#' @param parallel Boolean to express if parallel computing should be applied (defaults to FALSE). 
+#'        If TRUE, bootstraps and permutations will be distributed across multiple cores. 
+#' @param ncores Specifying the number of cores to use for parallelization. On default,
+#'        all but one of the available cores are used.
+#' @param ratio Boolean to express if variances or ratios of variance should be estimated. 
+#'        If FALSE, the variance(s) are returned without forming ratios. If TRUE (the default) ratios 
+#'        of variances (i.e. repeatabilities) are estimated.
+#' @param adjusted Boolean to express if adjusted or unadjusted repeatabilities should be estimated. 
+#'        If TRUE (the default), the variances explained by fixed effects (if any) will not
+#'        be part of the denominator, i.e. repeatabilities are calculated after controlling for 
+#'        variation due to covariates. If FALSE, the varianced explained by fixed effects (if any) will
+#'        be added to the denominator.
+#' @param expect A character string specifying the method for estimating the expectation in Poisson models
+#'        with log link and in Binomial models with logit link (in all other cases the agrument is ignored). 
+#'        The only valid terms are 'meanobs' and 'latent' (and 'liability for binary and proportion data). 
+#'        With the default 'meanobs', the expectation is 
+#'        estimated as the mean of the observations in the sample. With 'latent', the expectation is
+#'        estimated from estiamtes of the intercept and variances on the link scale. While this is a 
+#'        preferred solution, it is susceptible to the distribution of fixed effect covariates and gives 
+#'        appropriate results typically only when all covariances are centered to zero. With 'liability' 
+#'        estimates follow formulae as presented in Nakagawa & Schielzeth (2010). Liability estimates tend 
+#'        to be slightly higher.
+#'   
+#' @details For \code{datatype='Gaussian'} calls function \link{rptGaussian},
+#'          for \code{datatype='Poisson'} calls function \link{rptPoisson}, 
+#'          for \code{datatype='Binary'} calls function \link{rptBinary}, 
+#'          for \code{datatype='Proportion'} calls function \link{rptProportion}.
+#' 
+#' @return Returns an object of class \code{rpt}. See specific functions for details.
+#'
+#' @references Nakagawa, S. & Schielzeth, H. (2011) \emph{Repeatability for 
+#'      Gaussian and non-Gaussian data: a practical guide for biologists}. 
+#'      Biological Reviews 85: 935-956.
+#'      
+#' @author Holger Schielzeth  (holger.schielzeth@@uni-jena.de), 
+#'         Shinichi Nakagawa (s.nakagawa@unsw.edu.au),
+#'         Martin Stoffel (martin.adam.stoffel@@gmail.com) 
+#'         
+#' @seealso \link{rptR}
+#' 
+#' @examples
+#' # load data
+#' data(BeetlesBody)
+#' data(BeetlesMale)
+#' data(BeetlesFemale)
+#'
+#' #  prepare proportion data
+#' BeetlesMale$Dark <- BeetlesMale$Colour
+#' BeetlesMale$Reddish <- (BeetlesMale$Colour-1)*-1
+#' BeetlesColour <- aggregate(cbind(Dark, Reddish) ~ Treatment + Population + Container, 
+#'      data=BeetlesMale, FUN=sum)
+#' 
+#' # Note: nboot and npermut are set to 0 for speed reasons. Use larger numbers
+#' # for the real analysis.
+#' 
+#' # gaussian data (example with a single random effect)
+#' rpt(BodyL ~ (1|Population), grname="Population", data=BeetlesBody, 
+#'      nboot=0, npermut=0, datatype = "Gaussian")
+#' 
+#' # poisson data (example with two grouping levels and adjusted for fixed effect)
+#' rpt(Egg ~ Treatment + (1|Container) + (1|Population), grname=c("Population"), 
+#'      data = BeetlesFemale, nboot=0, npermut=0, datatype = "Poisson")
+#' 
+#' \dontrun{
+#' 
+#' # binary data (example with estimation of the fixed effect variance)
+#' rpt(Colour ~ Treatment + (1|Container) + (1|Population), 
+#'      grname=c("Population", "Container", "Fixed"), 
+#'      data=BeetlesMale, nboot=0, npermut=0, datatype = "Binary", adjusted = FALSE)
+#' 
+#' # proportion data (example for the estimation of raw variances, 
+#' # including residual and fixed-effect variance)
+#' rpt(cbind(Dark, Reddish) ~ Treatment + (1|Population), 
+#'      grname=c("Population", "Residual", "Fixed"), data=BeetlesColour,
+#'      nboot=0, npermut=0, datatype = "Proportion", ratio=FALSE)
+#' 
+#' }
+#' 
+#' @keywords models
+#' 
+#' @export
+#' 
+rpt <- function(formula, grname, data, datatype = c("Gaussian", "Binomial", "Proportion", 
+    "count"), link = c("logit", "probit", "log", "sqrt"), CI = 0.95, nboot = 1000, npermut = 0,
+    parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect = "meanobs") {
+        
+    if (datatype == "Gaussian") {
+            out_gaussian <- rptGaussian(formula, grname, data, CI, nboot, npermut, parallel, ncores, ratio, adjusted)
+            out_gaussian$call <- match.call()
+            return(out_gaussian)
+    }
+    if (datatype == "Binary") {
+            out_binary <- rptBinary(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect)
+            out_binary$call <- match.call()
+            return(out_binary)
+    }
+    if (datatype == "Proportion") {
+            out_proportion <- rptProportion(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect)
+            out_proportion$call <- match.call()
+            return(out_proportion)
+    }
+    if (datatype == "Poisson") {
+            out_poisson <- rptPoisson(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect)
+            out_poisson$call <- match.call()
+            return(out_poisson)
+    }
+} 
