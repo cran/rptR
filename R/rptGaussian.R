@@ -34,11 +34,14 @@
 #' \item{all_warnings}{\code{list} with two elements. 'warnings_boot' and 'warnings_permut' contain
 #' warnings from the lme4 model fitting of bootstrap and permutation samples, respectively.}
 #'
+#' @details 
+#' 
+#' see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+#' permutation and likelihood-ratio tests.
+#' 
 #' @references 
 #' Carrasco, J. L. & Jover, L.  (2003) \emph{Estimating the generalized 
 #' concordance correlation coefficient through variance components}. Biometrics 59: 849-858.
-#'
-#' Faraway, J. J. (2006) \emph{Extending the linear model with R}. Boca Raton, FL, Chapman & Hall/CRC.
 #' 
 #' Nakagawa, S. & Schielzeth, H. (2010) \emph{Repeatability for Gaussian and 
 #' non-Gaussian data: a practical guide for biologists}. Biological Reviews 85: 935-956
@@ -69,7 +72,8 @@
 #' rptGaussian(BodyL ~ Sex + Treatment + Habitat + (1|Container) + (1|Population), 
 #'                   grname=c("Container", "Population", "Fixed"), 
 #'                   data=BeetlesBody, nboot=3, npermut=3, adjusted=FALSE)
-#'                
+#'                   
+#'                   
 #' # two random effects, estimation of variance (instead repeatability)
 #' R_est <- rptGaussian(formula = BodyL ~ (1|Population) + (1|Container), 
 #'             grname= c("Population", "Container", "Residual"),
@@ -79,7 +83,8 @@
 #' 
 
 rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000, 
-        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE) {
+        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE,
+        rptObj = NULL, update = FALSE) {
         
         # delete rows with missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -93,6 +98,15 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         
         # fit model
         mod <- lme4::lmer(formula, data = data)
+        
+        # check for random slopes
+        # VarComps <- lme4::VarCorr(mod)
+        
+        # check whether matrix occurs in VarComps
+        # check_rs <- sum(unlist(lapply(VarComps[grname], function(x) sum(dim(x)) > 2)))
+        # randomslopes <- FALSE
+        # if (check_rs > 0) randomslopes <- TRUE
+        
         # extract variance components
         # VarComps <- as.data.frame(lme4::VarCorr(mod))
         
@@ -115,7 +129,7 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         
         # check whether Residual, Overdispersion or Fixed is selected and if so, remove it
         # from grname vector
- 
+        
         for (component in c("Residual", "Overdispersion", "Fixed")) {
                 if (any(grname == component)){
                         grname <- grname[-which(grname == component)]
@@ -124,15 +138,20 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
                         if (component == "Fixed") output_fixed <- TRUE
                 }
         }
-               
-          
+        
+        
         
         
         # point estimates of R or var
-        R_pe <- function(formula, data, grname) {
+        R_pe <- function(formula, data, grname, mod = NULL, resp = NULL) {
                 
-                # model
-                mod <- lme4::lmer(formula, data)
+                if (!is.null(mod)) {
+                        mod <- lme4::refit(mod, newresp = resp)
+                } else {
+                        # model
+                        mod <- lme4::lmer(formula, data)   
+                }
+                
                 VarComps <- lme4::VarCorr(mod)
                 
                 # Residual variance
@@ -146,15 +165,25 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
                 # Fixed effect variance
                 var_f <- stats::var(stats::predict(mod, re.form=NA))
                 names(var_f) <- "Fixed"
-
-                # group variances
-                var_a <- as.numeric(VarComps[grname])
+                
+                # group variances (group_vars is now an internal function in internal.R)
+                var_a <- unlist(lapply(grname, group_vars, VarComps, mod))
                 names(var_a) <- grname
                 
+                # without random slopes
+                # group variances
+                # var_a <- as.numeric(VarComps[grname])
+                # names(var_a) <- grname
+                
+                
+                # without random slopes
                 # denominator variance
-                var_p <- sum(as.numeric(VarComps)) + attr(VarComps, "sc")^2
+                # var_p <- sum(as.numeric(VarComps)) + attr(VarComps, "sc")^2
+                var_VarComps <- unlist(lapply(names(VarComps), group_vars, VarComps, mod))
+                var_p <- sum(as.numeric(var_VarComps)) + attr(VarComps, "sc")^2
+                
                 if (!adjusted) var_p <- var_p + var_f
-
+                
                 # return variance instead of repeatability
                 if (ratio == FALSE) { 
                         R <- as.data.frame(t(var_a))
@@ -175,11 +204,11 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
                 
                 # return repeatability
                 if (ratio == TRUE) { 
-        
+                        
                         R <- var_a/var_p
                         R <- as.data.frame(t(R))
                         names(R) <- grname
-                
+                        
                         # check whether to give out Residual
                         if(output_resid){
                                 R$Residual <- var_e / var_p
@@ -204,32 +233,39 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         
         # bootstrapping function
         bootstr <- function(y, mod, formula, data, grname) {
-                data[, names(stats::model.frame(mod))[1]] <- as.vector(y)
-                R_pe(formula, data, grname)
+                # data[, names(stats::model.frame(mod))[1]] <- as.vector(y)
+                resp <- as.vector(y)
+                # add mod and resp to use lme4::refit instead of fitting a new model
+                R_pe(formula, data, grname, mod = mod, resp = resp)
         }
+        
+        num_iter <- NULL
         
         warnings_boot <- with_warnings({
                 
-        if (nboot > 0 & parallel == TRUE) {
-                if (is.null(ncores)) {
-                        ncores <- parallel::detectCores() - 1
-                        warning("No core number specified: detectCores() is used to detect the number of \n cores on the local machine")
+                if (nboot > 0 & parallel == TRUE) {
+                        if (is.null(ncores)) {
+                                ncores <- parallel::detectCores() - 1
+                                warning("No core number specified: detectCores() is used to detect the number of \n cores on the local machine")
+                        }
+                        # start cluster
+                        cl <- parallel::makeCluster(ncores)
+                        parallel::clusterExport(cl, "R_pe", envir=environment())
+                        R_boot <- unname(parallel::parApply(cl = cl, Ysim, 2, bootstr, mod = mod, formula = formula, 
+                                data = data, grname = grname))
+                        parallel::stopCluster(cl)
                 }
-                # start cluster
-                cl <- parallel::makeCluster(ncores)
-                parallel::clusterExport(cl, "R_pe", envir=environment())
-                R_boot <- unname(parallel::parApply(cl, Ysim, 2, bootstr, mod = mod, formula = formula, 
-                        data = data, grname = grname))
-                parallel::stopCluster(cl)
-        }
-        
-        if (nboot > 0 & parallel == FALSE) {
-                R_boot <- unname(apply(Ysim, 2, bootstr, mod = mod, formula = formula, data = data, 
-                        grname = grname))
-        }
-        if (nboot == 0) {
-                R_boot <- NA
-        }
+                
+                if (nboot > 0 & parallel == FALSE) {
+                        
+                        cat("Bootstrap Progress:\n")
+                        R_boot <- unname(pbapply::pbapply(Ysim, 2, bootstr, mod = mod, formula = formula, data = data, 
+                                grname = grname))
+                        
+                }
+                if (nboot == 0) {
+                        R_boot <- NA
+                }
                 
         })
         
@@ -245,24 +281,38 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         if (length(R_boot) == 1) {
                 # creating tables when R_boot = NA
                 if (is.na(R_boot)) {
-                       se <- NA 
-                       CI_emp <- calc_CI(NA)
+                        se <- NA 
+                        CI_emp <- calc_CI(NA)
                 }
         } else  {
                 boot <- do.call(rbind, R_boot)
+                
+                ## addition
+                if (update){
+                        if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                        boot <- rbind(boot, rptObj$R_boot)
+                }
+                
                 CI_emp <- as.data.frame(t(apply(boot, 2, calc_CI)))
                 se <- as.data.frame(t(as.data.frame(lapply(boot, stats::sd))))
                 names(se) <- "se"
-              
+                
         }
         
-
+        
         # significance test by permutation of residuals
         P_permut <- rep(NA, length(grname))
         
         # significance test by likelihood-ratio-test
         terms <- attr(terms(formula), "term.labels")
         randterms <- terms[which(regexpr(" | ", terms, perl = TRUE) > 0)]
+        
+        # at the moment its not possible to fit the same grouping factor in more than one random effect
+        check_modelspecs <- sapply(grname, function(x) sum(grepl(x, randterms)))
+        if (any(check_modelspecs > 1)){
+                stop("Fitting the same grouping factor in more than one random 
+                        effect terms is not possible at the moment")  
+        } 
         
         # no permutation test
         if (npermut == 1) {
@@ -272,70 +322,118 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         
         # significance test by permutation of residuals
         # nperm argument just used for parallisation
-        permut <- function(nperm, formula, data, mod_red, dep_var, grname, i) {
+        permut <- function(nperm, formula, data, mod_red, dep_var, grname, i, mod) {
                 y_perm <- stats::fitted(mod_red) + sample(stats::resid(mod_red))
                 data_perm <- data
                 data_perm[dep_var] <- y_perm
-                out <- R_pe(formula, data_perm, grname[i])
+                
+                # add mod and resp to use lme4::refit instead of fitting a new model
+                out <- R_pe(formula, data_perm, grname[i], mod = mod, resp = y_perm)
                 out
         }
         
         dep_var <- as.character(formula)[2]
         # one random effect, uses stats::lm()
         # multiple random effects, uses lmer()
- 
+        
         R_permut <- data.frame(matrix(rep(NA, length(grname) * npermut), nrow = length(grname)))
         P_permut <- rep(NA, length(grname))
+        
+        if (update){
+                if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                
+                old_perm_length <- length(rptObj$R_permut[[1]])
+                R_permut <- data.frame(matrix(rep(NA, length(grname) * (npermut + old_perm_length)), nrow = length(grname)))
+                # add new R permut without empirical point estimate to old R permut
+                if (npermut > 0) npermut <- npermut + 1 # account for deleting the point estimate in the update
+        }
         
         # function for the reduced model in permut and LRT tests
         mod_fun <- ifelse(length(randterms) == 1, stats::lm, lme4::lmer)
         
         warnings_permut <- with_warnings({
                 
-        if (npermut > 1){
-                for (i in 1:length(grname)) {
-                                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")"))))
+                if (npermut > 1){
+                        for (i in 1:length(grname)) {
+                                # from random terms
+                                randterm <-  randterms[grep(grname[i], randterms)]
+                                # formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")")))) ## check that random slopes work
+                                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (", randterm, ")")))) ## check that random slopes work
                                 mod_red <- mod_fun(formula_red, data = data)
-                        if(parallel == TRUE) {
-                                if (is.null(ncores)) {
-                                        ncores <- parallel::detectCores()
-                                        warning("No core number specified: detectCores() is used to detect the number of \n cores on the local machine")
+                                if(parallel == TRUE) {
+                                        if (is.null(ncores)) {
+                                                ncores <- parallel::detectCores()
+                                                warning("No core number specified: detectCores() is used to detect the number of \n cores on the local machine")
+                                        }
+                                        # start cluster
+                                        cl <- parallel::makeCluster(ncores)
+                                        parallel::clusterExport(cl, "R_pe", envir=environment())
+                                        R_permut[i, ] <- c(R[i], as.numeric(unlist(parallel::parSapply(cl, 1:(npermut-1), permut, formula, data, mod_red, dep_var, grname, i, mod))))
+                                        parallel::stopCluster(cl)
+                                } else if (parallel == FALSE) {
+                                        cat("Permutation Progress for", grname[i], ":\n")
+                                        R_permut[i, ] <- c(R[i], as.numeric(unlist(pbapply::pbreplicate(npermut - 1, permut(formula=formula, data = data, 
+                                                mod_red=mod_red, dep_var=dep_var, grname=grname, i=i, mod = mod)))))
+                                        
                                 }
-                                # start cluster
-                                cl <- parallel::makeCluster(ncores)
-                                parallel::clusterExport(cl, "R_pe", envir=environment())
-                                R_permut[i, ] <- c(R[i], as.numeric(unlist(parallel::parSapply(cl, 1:(npermut-1), permut, formula, data, mod_red, dep_var, grname, i))))
-                                parallel::stopCluster(cl)
-                                P_permut[i] <- sum(R_permut[i, ] >= unlist(R[i]))/npermut
-                        } else if (parallel == FALSE) {
-                                R_permut[i, ] <- c(R[i], as.numeric(unlist(replicate(npermut - 1, permut(formula=formula, data = data, 
-                                        mod_red=mod_red, dep_var=dep_var, grname=grname, i=i)))))
+                                
+                                ## addition
+                                if (update){
+                                        if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                                        
+                                        R_permut[i, ] <- c(rptObj$R_permut[[i]], unlist(R_permut[i, ])[-1])
+                                        # add new R permut without empirical point estimate to old R permut
+                                }
+                                
                                 P_permut[i] <- sum(R_permut[i, ] >= unlist(R[i]))/npermut
                         }
                 }
-        }
                 
         })
         # name R_permut and P_permut
         row.names(R_permut) <- grname
         names(P_permut) <- grname
-  
+        
         
         ## likelihood-ratio-test
         LRT_mod <- as.numeric(stats::logLik(mod))
-        LRT_df <- rep(1, length(grname))
+        # k*(k-1)/2+k
+        # check_rs <- sum(unlist(lapply(VarComps[grname], function(x) sum(dim(x)) > 2)))
+        
+        # calculate df for random slopes
+        VarComps <- lme4::VarCorr(mod)
+        mat_dims <- unlist(lapply(VarComps[grname], ncol))
+        calc_df <- function(k){
+                if (k == 1) df <- 1
+                if (k > 1){
+                        terms <- attr(terms(formula), "term.labels")
+                        current_term <- terms[grep(names(k), terms)]
+                        if (grep("0", current_term)){
+                                df <- (k*(k-1)/2+k) - 1    
+                        } else {
+                                df <- k*(k-1)/2+k  
+                        }
+                } 
+                df
+        }
+        LRT_df <- sapply(mat_dims, calc_df) 
         
         # preassign
         for (i in c("LRT_P", "LRT_D", "LRT_red")) assign(i, rep(NA, length(grname)))
         # function
         # mod_fun <- ifelse(length(randterms) == 1, stats::lm, lme4::lmer)
-        
+
         for (i in 1:length(grname)) {
-                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")"))))
+                randterm <-  randterms[grep(grname[i], randterms)]
+                # formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")")))) ## check that random slopes work
+                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (", randterm, ")")))) ## check that random slopes work
                 LRT_red[i] <- as.numeric(stats::logLik(mod_fun(formula = formula_red, data = data)))
                 LRT_D[i] <- as.numeric(-2 * (LRT_red[i] - LRT_mod))
-                LRT_P[i] <- ifelse(LRT_D[i] <= 0, 1, stats::pchisq(LRT_D[i], 1, lower.tail = FALSE)/2)
+                LRT_P[i] <- ifelse(LRT_D[i] <= 0, 1, stats::pchisq(LRT_D[i], LRT_df[i], lower.tail = FALSE)) 
         }
+        # division by 2 if LRT_df = 1
+        LRT_P <- LRT_P/ifelse(LRT_df==1,2,1)
+        
         LRT_table <- data.frame(logL_red = LRT_red, LR_D = LRT_D, LRT_P = LRT_P, LRT_df =  LRT_df, stringsAsFactors = FALSE)
         row.names(LRT_table) <- grname
         
@@ -352,7 +450,7 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
                         row.names(LRT_table)[nrow(LRT_table)] <- component
                 }
         }
-   
+        
         
         res <- list(call = match.call(), 
                 datatype = "Gaussian", 

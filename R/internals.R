@@ -18,7 +18,30 @@ with_warnings <- function(expr) {
         list(warnings = myWarnings)
 } 
 
-
+#' Calculates / extracts variance components from random effects and random slopes
+#'
+#' This function uses the method from Paul Johnson to compute the average group
+#' variance across the levels of a covariate.
+#'
+#' @param grname The name of a grouping factor, usually accessed by looping over the
+#' grname argument of the rptR functions.
+#' @param VarComps A list. Output of the lme4::VarCorr function.
+#' @param mod An lme4 model object.
+#' @keywords internal
+#' 
+group_vars <- function(grname, VarComps, mod){
+        # check whether component is a matrix (--> random slopes)
+        if (sum(dim(VarComps[[grname]])) > 2 ){
+                sigma <- VarComps[[grname]] 
+                # design matrix subsetted for the elements of sigma
+                Z <- stats::model.matrix(mod)[, colnames(sigma)]
+                # average variance across covariate
+                var_grname <- sum(rowSums((Z %*% sigma) * Z))/stats::nobs(mod)
+        } else {
+                var_grname <- as.numeric(VarComps[[grname]])
+        }
+        var_grname
+}
 
 
 #' Bootstrapping for non-gaussian functions (internal use)
@@ -37,7 +60,7 @@ with_warnings <- function(expr) {
 #' @param CI confidence interval, defaults to 0.95
 #' @keywords internal
 
-bootstrap_nongaussian <- function(bootstr, R_pe, formula, data, Ysim, mod, grname, grname_org, nboot, parallel, ncores, CI) {
+bootstrap_nongaussian <- function(bootstr, R_pe, formula, data, Ysim, mod, grname, grname_org, nboot, parallel, ncores, CI, rptObj, update) {
         
         e_boot <- environment()
         
@@ -57,7 +80,8 @@ bootstrap_nongaussian <- function(bootstr, R_pe, formula, data, Ysim, mod, grnam
                         parallel::stopCluster(cl)
                 }
                 if (nboot > 0 & parallel == FALSE) {
-                        R_boot <- unname(lapply(Ysim, bootstr, mod, formula, data , 
+                        cat("Bootstrap Progress:\n")
+                        R_boot <- unname(pbapply::pblapply(Ysim, bootstr, mod, formula, data , 
                                 grname))
                 }
                 if (nboot == 0) {
@@ -85,8 +109,17 @@ bootstrap_nongaussian <- function(bootstr, R_pe, formula, data, Ysim, mod, grnam
                 }
         } else {
                 for (i in 1:length(grname_org)) {
-                        boot_org[[i]] <- unlist(lapply(R_boot, function(x) x["R_org", grname_org[i]]))
-                        boot_link[[i]] <- unlist(lapply(R_boot, function(x) x["R_link", grname_org[i]]))
+                        
+                        if (update){
+                                if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                                boot_org[[i]] <- c(rptObj$R_boot_org[[i]], unlist(lapply(R_boot, function(x) x["R_org", grname_org[i]])))
+                                boot_link[[i]] <- c(rptObj$R_boot_link[[i]],unlist(lapply(R_boot, function(x) x["R_link", grname_org[i]])))
+                        } else {
+                                boot_org[[i]] <- unlist(lapply(R_boot, function(x) x["R_org", grname_org[i]]))
+                                boot_link[[i]] <- unlist(lapply(R_boot, function(x) x["R_link", grname_org[i]])) 
+                        }
+                        
+         
                 }
                 names(boot_org) <- grname_org
                 names(boot_link) <- grname_org
@@ -127,7 +160,8 @@ bootstrap_nongaussian <- function(bootstr, R_pe, formula, data, Ysim, mod, grnam
 #' 
 #' @keywords internal
 
-permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npermut, parallel, ncores, link, family, R){
+permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npermut, parallel, 
+                               ncores, link, family, R, rptObj, update){
         
   
         # predefine if no permutation test
@@ -144,6 +178,13 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
         terms <- attr(terms(formula), "term.labels")
         randterms <- terms[which(regexpr(" | ", terms, perl = TRUE) > 0)]
         
+        # at the moment its not possible to fit the same grouping factor in more than one random effect
+        check_modelspecs <- sapply(grname, function(x) sum(grepl(x, randterms)))
+        if (any(check_modelspecs > 1)){
+                stop("Fitting the same grouping factor in more than one random 
+                        effect terms is not possible at the moment")  
+        } 
+        
         # function for the reduced model in permut and LRT tests
         mod_fun <- ifelse(length(randterms) == 1, stats::glm, lme4::glmer)
         
@@ -153,11 +194,20 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
    
         e_permut <- environment()
         
+        if (update){
+                if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                # one more permutation as we don't add the empirical point estimate again
+                if (npermut > 0)  npermut <- npermut + 1
+        }
+        
         warnings_permut <- with_warnings({
                 
                 if (npermut > 1){
                         for (i in 1:length(grname)) {
-                                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")"))))
+                                # from random terms
+                                randterm <-  randterms[grep(grname[i], randterms)]
+                                # formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")")))) ## check that random slopes work
+                                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (", randterm, ")")))) ## check that random slopes work
                                 mod_red <- mod_fun(formula_red, data = data, family = family_fun(link = link))
                                 
                                 if (!(grname[i] == "Overdispersion")){
@@ -175,7 +225,8 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
                                         parallel::stopCluster(cl)
                                         
                                 } else if (parallel == FALSE) {
-                                        out_permut <- lapply(1:(npermut - 1), permut, formula, mod_red, dep_var, grname[i], data)
+                                        cat(paste0("Permutation Progress for ", grname[i], ":\n"))
+                                        out_permut <- pbapply::pblapply(1:(npermut - 1), permut, formula, mod_red, dep_var, grname[i], data)
                                 }
                                 
                                 } 
@@ -193,7 +244,13 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
                                 
                         
                         }
-                        R_permut <- c(list(R), R_permut)
+                        
+                        if (!update){
+                                # if we are updated, we don't add the point estimate again
+                                R_permut <- c(list(R), R_permut)
+                        }
+                        
+                        # R_permut <- c(list(R), R_permut)
                         R_permut[[1]]["Overdispersion"] <- NA
                 }
         })
@@ -203,9 +260,19 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
         permut_link <- as.list(rep(NA, length(grname)))
         
         if (!(length(R_permut) == 1)){
+                
                 for (i in 1:length(grname)) {
-                        permut_org[[i]] <- unlist(lapply(R_permut, function(x) x["R_org", grname[i]]))
-                        permut_link[[i]] <- unlist(lapply(R_permut, function(x) x["R_link", grname[i]]))
+                        
+                        if (update){
+                                if (is.null(rptObj)) stop("provide rpt object for rptObj argument")
+                                permut_org[[i]]<- c(rptObj$R_permut_org[[i]], unlist(lapply(R_permut, function(x) x["R_org", grname[i]])))
+                                permut_link[[i]] <- c(rptObj$R_permut_link[[i]], unlist(lapply(R_permut, function(x) x["R_link", grname[i]])))
+                        } else {
+                                permut_org[[i]] <- unlist(lapply(R_permut, function(x) x["R_org", grname[i]]))
+                                permut_link[[i]] <- unlist(lapply(R_permut, function(x) x["R_link", grname[i]]))
+                        }
+                        
+                      
                 }
                 names(permut_org) <- grname
                 names(permut_link) <- grname
@@ -217,7 +284,8 @@ permut_nongaussian <- function(permut, R_pe, formula, data, dep_var, grname, npe
         names(P_permut) <- names(permut_link)
         
         
-        out <- list(P_permut = P_permut, permut_org = permut_org, permut_link = permut_link, warnings_permut = warnings_permut)
+        out <- list(P_permut = P_permut, permut_org = permut_org, 
+                permut_link = permut_link, warnings_permut = warnings_permut)
 
 }
 
@@ -244,18 +312,41 @@ LRT_nongaussian <- function(formula, data, grname, mod, link, family){
         mod_fun <- ifelse(length(randterms) == 1, stats::glm, lme4::glmer)
         
         LRT_mod <- as.numeric(stats::logLik(mod))
-        LRT_df <- 1
+        
+        # calculate df for random slopes
+        VarComps <- lme4::VarCorr(mod)
+        mat_dims <- unlist(lapply(VarComps[grname], ncol))
+        calc_df <- function(k){
+                if (k == 1) df <- 1
+                if (k > 1){
+                        terms <- attr(terms(formula), "term.labels")
+                        current_term <- terms[grep(names(k), terms)]
+                        if (grep("0", current_term)){
+                                df <- (k*(k-1)/2+k) - 1    
+                        } else {
+                                df <- k*(k-1)/2+k  
+                        }
+                } 
+                df
+        }
+        LRT_df <- sapply(mat_dims, calc_df) 
 
         for (i in c("LRT_P", "LRT_D", "LRT_red")) assign(i, rep(NA, length(grname)))
 
         for (i in 1:length(grname)) {
-                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")"))))
+                # formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (1 | ", grname[i], ")"))))
+                randterm <-  randterms[grep(grname[i], randterms)]
+                formula_red <- stats::update(formula, eval(paste(". ~ . ", paste("- (", randterm, ")")))) ## check that random slopes work
+                
                 LRT_red[i] <- as.numeric(stats::logLik(mod_fun(formula = formula_red, data = data,
                         family = family_fun(link = link))))
                 LRT_D[i] <- as.numeric(-2 * (LRT_red[i] - LRT_mod))
-                LRT_P[i] <- ifelse(LRT_D[i] <= 0, 1, stats::pchisq(LRT_D[i], 1, lower.tail = FALSE)/2)
+                LRT_P[i] <- ifelse(LRT_D[i] <= 0, 1, stats::pchisq(LRT_D[i], LRT_df[i], lower.tail = FALSE)) 
         }
-
+        
+        # division by 2 if LRT_df = 1
+        LRT_P <- LRT_P/ifelse(LRT_df==1,2,1)
+        
         LRT_table <- data.frame(logL_red = LRT_red, LR_D = LRT_D, LRT_P = LRT_P, LRT_df =  LRT_df, stringsAsFactors = FALSE)
         row.names(LRT_table) <- grname
         

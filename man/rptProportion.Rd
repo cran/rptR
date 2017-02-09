@@ -6,7 +6,8 @@
 \usage{
 rptProportion(formula, grname, data, link = c("logit", "probit"), CI = 0.95,
   nboot = 1000, npermut = 0, parallel = FALSE, ncores = NULL,
-  ratio = TRUE, adjusted = TRUE, expect = "meanobs")
+  ratio = TRUE, adjusted = TRUE, expect = "meanobs", rptObj = NULL,
+  update = FALSE)
 }
 \arguments{
 \item{formula}{Formula as used e.g. by \link{lmer}. The grouping factor(s) of
@@ -32,12 +33,13 @@ and \code{grname} arguments.}
 \item{nboot}{Number of parametric bootstraps for interval estimation 
 (defaults to 1000). Larger numbers of bootstraps give a better
 asymtotic CI, but may be time-consuming. Bootstrapping can be switch off by setting 
-\code{nboot = 0}.}
+\code{nboot = 0}. See also \strong{Details} below.}
 
 \item{npermut}{Number of permutations used when calculating asymptotic p-values 
 (defaults to 0). Larger numbers of permutations give a better
 asymtotic p-values, but may be time-consuming (in particular when multiple grouping factors
-are specified). Permutaton tests can be switch off by setting \code{npermut = 0}.}
+are specified). Permutaton tests can be switch off by setting \code{npermut = 0}. 
+See also \strong{Details} below.}
 
 \item{parallel}{Boolean to express if parallel computing should be applied (defaults to FALSE). 
 If TRUE, bootstraps and permutations will be distributed across multiple cores.}
@@ -65,6 +67,13 @@ preferred solution, it is susceptible to the distribution of fixed effect covari
 appropriate results typically only when all covariances are centered to zero. With 'liability' 
 estimates follow formulae as presented in Nakagawa & Schielzeth (2010). Liability estimates tend 
 to be slightly higher.}
+
+\item{rptObj}{The output of a rptR function. Can be specified in combination with update = TRUE
+to update bootstraps and permutations}
+
+\item{update}{If TRUE, the rpt object to be updated has to be inputted with the rptObj argument.
+The function just updates the permutations and bootstraps, so make sure to specify all other
+arguments excactly like for the rpt object specified in rptObj.}
 }
 \value{
 Returns an object of class \code{rpt} that is a a list with the following elements: 
@@ -106,6 +115,10 @@ Returns an object of class \code{rpt} that is a a list with the following elemen
 }
 \description{
 Estimates repeatability from a generalized linear mixed-effects models fitted by restricted maximum likelihood (REML).
+}
+\details{
+see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+permutation and likelihood-ratio tests.
 }
 \examples{
 data(BeetlesMale)

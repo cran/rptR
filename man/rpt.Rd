@@ -7,7 +7,8 @@
 rpt(formula, grname, data, datatype = c("Gaussian", "Binomial", "Proportion",
   "count"), link = c("logit", "probit", "log", "sqrt"), CI = 0.95,
   nboot = 1000, npermut = 0, parallel = FALSE, ncores = NULL,
-  ratio = TRUE, adjusted = TRUE, expect = "meanobs")
+  ratio = TRUE, adjusted = TRUE, expect = "meanobs", rptObj = NULL,
+  update = FALSE)
 }
 \arguments{
 \item{formula}{Formula as used e.g. by \link{lmer}. The grouping factor(s) of
@@ -37,12 +38,13 @@ and \code{grname} arguments.}
 \item{nboot}{Number of parametric bootstraps for interval estimation 
 (defaults to 1000). Larger numbers of bootstraps give a better
 asymtotic CI, but may be time-consuming. Bootstrapping can be switch off by setting 
-\code{nboot = 0}.}
+\code{nboot = 0}. See also \strong{Details} below.}
 
 \item{npermut}{Number of permutations used when calculating asymptotic p-values 
 (defaults to 0). Larger numbers of permutations give a better
 asymtotic p-values, but may be time-consuming (in particular when multiple grouping factors
-are specified). Permutaton tests can be switch off by setting \code{npermut = 0}.}
+are specified). Permutaton tests can be switch off by setting \code{npermut = 0}. 
+See also \strong{Details} below.}
 
 \item{parallel}{Boolean to express if parallel computing should be applied (defaults to FALSE). 
 If TRUE, bootstraps and permutations will be distributed across multiple cores.}
@@ -70,6 +72,13 @@ preferred solution, it is susceptible to the distribution of fixed effect covari
 appropriate results typically only when all covariances are centered to zero. With 'liability' 
 estimates follow formulae as presented in Nakagawa & Schielzeth (2010). Liability estimates tend 
 to be slightly higher.}
+
+\item{rptObj}{The output of a rptR function. Can be specified in combination with update = TRUE
+to update bootstraps and permutations}
+
+\item{update}{If TRUE, the rpt object to be updated has to be inputted with the rptObj argument.
+The function just updates the permutations and bootstraps, so make sure to specify all other
+arguments excactly like for the rpt object specified in rptObj.}
 }
 \value{
 Returns an object of class \code{rpt}. See specific functions for details.
@@ -80,10 +89,41 @@ models fitted by restricted maximum likelihood (REML). Calls
 specialised functions depending of the choice of datatype and method.
 }
 \details{
-For \code{datatype='Gaussian'} calls function \link{rptGaussian},
-         for \code{datatype='Poisson'} calls function \link{rptPoisson}, 
-         for \code{datatype='Binary'} calls function \link{rptBinary}, 
-         for \code{datatype='Proportion'} calls function \link{rptProportion}.
+For \code{datatype='Gaussian'} calls function \link{rptGaussian},  
+for \code{datatype='Poisson'} calls function \link{rptPoisson},   
+for \code{datatype='Binary'} calls function \link{rptBinary},   
+for \code{datatype='Proportion'} calls function \link{rptProportion}.  
+  
+Confidence intervals and standard errors are estimated by \strong{parametric bootstrapping}. 
+Under the assumption that the model is specified correctly, the fitted model can be used
+to generate response values that could potentially be obversed. Differences between the original 
+data and the simulated response from the fitted model arise from sampling variation. The full model
+is then fitted to each simuated response vector. The distribution of estimates across all 
+\code{nboot} replicates represents the design- and model-specific sampling variance and hence 
+uncertainty of the estimates.
+
+In addition to the likelihood-ratio test, the package uses \strong{permutation tests} for null 
+hypothesis testing. The general idea is to randomize data under the null hypothesis of no effect 
+and then test in how many cases the estimates from the model reach or exceed those in the observed 
+data. In the simplest case, a permutation test randomizes the vector of group identities against 
+the response vector many times, followed by refitting the model and recalculating the repeatabilities.
+This provides a null distribution for the case that group identities are unrelated to the response. 
+However, in more complex models involving multiple random effects and/or fixed effects, such a 
+procedure will also break the data structure between the grouping factor of interest and other 
+aspects of the experimental design. Therefore \code{rptR} implements a more robust alternative 
+which works by fitting a model withouth the grouping factor of interest. It then adds the 
+randomized residuals to the fitted values of this model, followed by recalculating the repeatability 
+from the full model. This procedure maintains the general data structure and any effects other 
+than the grouping effect of interest. The number of permutations can be adjusted with the \code{nperm} argument. 
+By the logic of a null hypothsis testing, the observed data is one possible (albeit maybe unlikely) 
+outcome under the null hypothesis. So the observed data is always included as one 'randomization' and 
+the P value can thus never be lower than \code{1/nperm}, because at least one randomization is as 
+exteme as the observed data.   
+
+Note also that the \strong{likelihood-ratio test}, since testing variances at the boundary of the 
+possible parameter range (i.e. against zero), uses a mixture distribution of Chi-square 
+distrbutions with zero and one degree of freedom as a reference. This ist equivalent to deviding 
+the P value derived from a Chi-square distribution with one degree of freedom by two.
 }
 \examples{
 # load data
@@ -130,7 +170,7 @@ Holger Schielzeth  (holger.schielzeth@uni-jena.de),
         Martin Stoffel (martin.adam.stoffel@gmail.com)
 }
 \references{
-Nakagawa, S. & Schielzeth, H. (2011) \emph{Repeatability for 
+Nakagawa, S. & Schielzeth, H. (2010) \emph{Repeatability for 
      Gaussian and non-Gaussian data: a practical guide for biologists}. 
      Biological Reviews 85: 935-956.
 }

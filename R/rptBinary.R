@@ -41,6 +41,11 @@
 #' \item{all_warnings}{\code{list} with two elements. 'warnings_boot' and 'warnings_permut' contain
 #'      warnings from the lme4 model fitting of bootstrap and permutation samples, respectively.}
 #'
+#' @details 
+#' 
+#' see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+#' permutation and likelihood-ratio tests.
+#' 
 #' @references 
 #' Carrasco, J. L. & Jover, L.  (2003) \emph{Estimating the generalized 
 #' concordance correlation coefficient through variance components}. Biometrics 59: 849-858.
@@ -84,7 +89,8 @@
 #' 
 
 rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0.95, nboot = 1000, 
-                      npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs") {
+        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
+        rptObj = NULL, update = FALSE) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -95,10 +101,10 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         
         # check whether grnames just contain "Residual" or "Overdispersion"
         if (!any((grname != "Residual") & (grname != "Fixed"))) stop("Specify at least one grouping factor in grname")
-
+        
         # check whether expect is either "meanobs" or "latent" or "liability"
         if (expect != "meanobs" & expect != "latent" & expect != "liability") stop("The argument expect has to be either 'meanobs' (the default), 'latent' or 'liability'")
-                
+        
         # link
         if (length(link) > 1) link <- "logit"
         if (!(link %in% c("logit", "probit"))) stop("Link function has to be 'logit' or 'probit'")
@@ -107,7 +113,14 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         data <- cbind(data, Overdispersion)
         formula <- stats::update(formula,  ~ . + (1|Overdispersion))
         mod <- lme4::glmer(formula, data = data, family = stats::binomial(link = link))
-
+        
+        # check for random slopes
+        VarComps <- lme4::VarCorr(mod)
+        # check whether matrix occurs in VarComps
+        check_rs <- sum(unlist(lapply(VarComps[grname], function(x) sum(dim(x)) > 2)))
+        randomslopes <- FALSE
+        if (check_rs > 0) randomslopes <- TRUE
+        
         if (nboot == 1) {
                 warning("nboot has to be greater than 1 to calculate a CI and has been set to 0")
                 nboot <- 0
@@ -125,7 +138,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         # inverf based on posting by sundar on R-help
         # https://stat.ethz.ch/pipermail/r-help/2006-June/108153.html
         inverf <- function(x) stats::qnorm((x + 1)/2)/sqrt(2)
-
+        
         # check whether Residual, Overdispersion or Fixed is selected and if so, remove it
         # from grname vector
         for (component in c("Residual", "Fixed")) {
@@ -143,28 +156,40 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
                 
                 # mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link))
                 # random effect variance data.frame
-                VarComps <- as.data.frame(lme4::VarCorr(mod))
-                rownames(VarComps) = VarComps$grp
-
-                # groups random effect variances
-                var_a <- VarComps[grname, "vcov"]
+                
+                #VarComps <- as.data.frame(lme4::VarCorr(mod))
+                # rownames(VarComps) = VarComps$grp
+                
+                VarComps <- lme4::VarCorr(mod)
+                
+                # group variances (group_vars is now an internal function in internal.R)
+                var_a <- unlist(lapply(grname, group_vars, VarComps, mod))
                 names(var_a) <- grname
-
+                
+                # groups random effect variances
+                # var_a <- VarComps[grname, "vcov"]
+                # names(var_a) <- grname
+                
                 # intercept on link scale
                 beta0 <- unname(lme4::fixef(mod)[1])
                 
                 # Fixed effect variance
                 var_f <- stats::var(stats::predict(mod, re.form=NA))
                 
+                # variance of all VarComps
+                var_VarComps <- unlist(lapply(names(VarComps), group_vars, VarComps, mod))
+                names(var_VarComps) <- names(VarComps)
+                
                 # Distribution-specific and Residual variance
                 if (link == "logit") {
-                        if(expect=="latent") Ep <- stats::plogis(beta0*sqrt(1+((16*sqrt(3))/(15*pi))^2*(sum(VarComps[,"vcov"])+var_f))^-1)
+                        # if(expect=="latent") Ep <- stats::plogis(beta0*sqrt(1+((16*sqrt(3))/(15*pi))^2*(sum(VarComps[,"vcov"])+var_f))^-1)
+                        if(expect=="latent") Ep <- stats::plogis(beta0*sqrt(1+((16*sqrt(3))/(15*pi))^2*(sum(var_VarComps)+var_f))^-1)
                         if(expect=="meanobs") Ep <- mean(mod@resp$y, na.rm=TRUE)
                         if(expect=="liability") Ep <- exp(beta0) / (1 + exp(beta0))
                         if(expect=="latent") estdv_link <- 1 / (Ep*(1-Ep))
                         if(expect=="meanobs") estdv_link <- 1 / (Ep*(1-Ep))
                         if(expect=="liability") estdv_link <- pi^2/3
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <-  var_VarComps["Overdispersion"] + estdv_link
                 }
                 if (link == "probit") {
                         if(expect=="latent") Ep <- stats::pnorm(beta0*sqrt(1+sum(VarComps[,"vcov"])+var_f)^-1)
@@ -172,7 +197,8 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
                         if(expect=="latent") estdv_link <- 2*pi*Ep*(1-Ep) * (exp(inverf(2*Ep-1)^2))^2
                         if(expect=="meanobs") estdv_link <- 2*pi*Ep*(1-Ep) * (exp(inverf(2*Ep-1)^2))^2
                         if(expect=="liability") estdv_link <- 1
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        # var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <-  var_VarComps["Overdispersion"] + estdv_link
                 }
                 
                 if (ratio == FALSE) {
@@ -193,20 +219,21 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
                 if (ratio == TRUE) {
                         if (link == "logit") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) + estdv_link
+                                # var_p_link <- sum(VarComps[,"vcov"]) + estdv_link # / old
+                                var_p_link <- sum(var_VarComps) + estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link <- var_a/ var_p_link
                                 R_r <- var_r / var_p_link
                                 R_f_link <- var_f / var_p_link                                
                                 # origial scale
-                                if(adjusted) var_p_org <- (sum(VarComps[,"vcov"]) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
-                                if(!adjusted) var_p_org <- ((sum(VarComps[,"vcov"])+var_f) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
+                                if(adjusted) var_p_org <- (sum(var_VarComps) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
+                                if(!adjusted) var_p_org <- ((sum(var_VarComps)+var_f) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
                                 R_org <- ( var_a * Ep^2 / ((1 + exp(stats::qlogis(Ep)))^2)) / var_p_org
                                 R_f_org <- ( var_f * Ep^2/ ((1 + exp(stats::qlogis(Ep)))^2)) / var_p_org
                         }
                         if (link == "probit") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) + estdv_link
+                                var_p_link <- sum(var_VarComps) + estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link <- var_a / var_p_link
                                 R_r <- var_r / var_p_link
@@ -217,7 +244,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
                         }
                         # check whether that works for any number of var
                         R <- as.data.frame(rbind(R_org, R_link))
-                
+                        
                         # check whether to give out non-repeatability and overdispersion repeatability
                         if (output_resid){
                                 R[,"Residual"] <- c(NA, R_r) # add NA for R_org
@@ -245,8 +272,9 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         }
         
         # run all bootstraps
-        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, grname_org, nboot, parallel, ncores, CI)
-       
+        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, 
+                grname_org, nboot, parallel, ncores, CI, rptObj, update)
+        
         # load everything (bad solution to assure global binding and satisfy cran check) 
         se_org <- bootstraps$se_org
         se_link <- bootstraps$se_link
@@ -258,8 +286,8 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         
         # load everything (elegant solution)
         # list2env(bootstraps, envir = e1)   
-     
-  
+        
+        
         
         ### significance test by permutation of residuals ###
         
@@ -270,7 +298,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         
         if (link == "logit") inv_fun <- stats::plogis
         if (link == "probit") inv_fun <- stats::pnorm
-
+        
         permut <- function(nperm, formula, mod_red, dep_var, grname, data) {
                 # for binom it will be logit 
                 y_perm <- stats::rbinom(nrow(data), 1, 
@@ -283,7 +311,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         
         family <- "binomial"
         permutations <- permut_nongaussian(permut, R_pe, formula, data, dep_var, 
-                                           grname, npermut, parallel, ncores, link, family, R)
+                grname, npermut, parallel, ncores, link, family, R, rptObj, update)
         
         P_permut <- permutations$P_permut
         permut_org <- permutations$permut_org
@@ -320,21 +348,21 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         ngroups <- ngroups[!names(ngroups) == "Overdispersion"]
         
         res <- list(call = match.call(), 
-                    datatype = "Binary", 
-                    link = link,
-                    CI = CI, 
-                    R = R, 
-                    se = as.data.frame(t(cbind(se_org,se_link))), # changed to 
-                    CI_emp = list(CI_org = CI_org, CI_link = CI_link), 
-                    P = as.data.frame(P),
-                    R_boot_link = boot_link, 
-                    R_boot_org = boot_org,
-                    R_permut_link = permut_link, 
-                    R_permut_org = permut_org,
-                    LRT = list(LRT_mod = LRT_mod, LRT_table = LRT_table), 
-                    ngroups = ngroups, 
-                    nobs = nrow(data), mod = mod, ratio = ratio, adjusted = adjusted,
-                    all_warnings = list(warnings_boot = warnings_boot, warnings_permut = warnings_permut))
+                datatype = "Binary", 
+                link = link,
+                CI = CI, 
+                R = R, 
+                se = as.data.frame(t(cbind(se_org,se_link))), # changed to 
+                CI_emp = list(CI_org = CI_org, CI_link = CI_link), 
+                P = as.data.frame(P),
+                R_boot_link = boot_link, 
+                R_boot_org = boot_org,
+                R_permut_link = permut_link, 
+                R_permut_org = permut_org,
+                LRT = list(LRT_mod = LRT_mod, LRT_table = LRT_table), 
+                ngroups = ngroups, 
+                nobs = nrow(data), mod = mod, ratio = ratio, adjusted = adjusted,
+                all_warnings = list(warnings_boot = warnings_boot, warnings_permut = warnings_permut))
         class(res) <- "rpt"
         return(res)
-} 
+}

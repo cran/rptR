@@ -42,6 +42,11 @@
 #' \item{all_warnings}{\code{list} with two elements. 'warnings_boot' and 'warnings_permut' contain
 #'      warnings from the lme4 model fitting of bootstrap and permutation samples, respectively.}
 #'
+#' @details 
+#' 
+#' see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+#' permutation and likelihood-ratio tests.
+#' 
 #' @references 
 #' Carrasco, J. L. & Jover, L.  (2003) \emph{Estimating the generalized 
 #' concordance correlation coefficient through variance components}. Biometrics 59: 849-858.
@@ -88,7 +93,8 @@
 #' 
 
 rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95, nboot = 1000, 
-        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs") {
+        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
+        rptObj = NULL, update = FALSE) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -112,7 +118,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         data <- cbind(data, Overdispersion)
         formula <- stats::update(formula,  ~ . + (1|Overdispersion))
         mod <- lme4::glmer(formula, data = data, family = stats::poisson(link = link))
-
+        
         if (nboot == 1) {
                 warning("nboot has to be greater than 1 to calculate a CI and has been set to 0")
                 nboot <- 0
@@ -142,30 +148,33 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
                 # mod <- suppressWarnings(lme4::glmer(formula = formula, data = data, family = stats::poisson(link = link)))
                 mod <- lme4::glmer(formula = formula, data = data, family = stats::poisson(link = link))
                 
-                # random effect variance data.frame
-                VarComps <- as.data.frame(lme4::VarCorr(mod))
-                rownames(VarComps) = VarComps$grp
-                
                 # groups random effect variances
-                var_a <- VarComps[grname, "vcov"]
+                VarComps <- lme4::VarCorr(mod)
+                
+                # group variances (group_vars is now an internal function in internal.R)
+                var_a <- unlist(lapply(grname, group_vars, VarComps, mod))
                 names(var_a) <- grname
                 
                 # intercept on link scale
                 beta0 <- unname(lme4::fixef(mod)[1])
-
+                
                 # Fixed effect variance
                 var_f <- stats::var(stats::predict(mod, re.form=NA))
+                
+                # variance of all VarComps
+                var_VarComps <- unlist(lapply(names(VarComps), group_vars, VarComps, mod))
+                names(var_VarComps) <- names(VarComps)
                 
                 # Distribution-specific and residual variance
                 if (link == "sqrt") {
                         estdv_link = 0.25
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <- var_VarComps["Overdispersion"] + estdv_link
                 }
                 if (link == "log") {
                         if(expect=="meanobs") EY <- mean(mod@resp$y, na.rm=TRUE)
-                        if(expect=="latent") EY <- exp(beta0 + (sum(VarComps[,"vcov"]) + var_f)/2)
+                        if(expect=="latent") EY <- exp(beta0 + (sum(var_VarComps) + var_f)/2)
                         estdv_link = log(1/EY+1)
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <- var_VarComps["Overdispersion"] + estdv_link
                 }
                 
                 if (ratio == FALSE) {
@@ -186,7 +195,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
                 if (ratio == TRUE) {
                         if (link == "sqrt") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) + estdv_link
+                                var_p_link <- sum(var_VarComps) + estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link <- var_a / var_p_link
                                 R_r <- var_r / var_p_link
@@ -197,20 +206,20 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
                         }
                         if (link == "log") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) +  estdv_link
+                                var_p_link <- sum(var_VarComps) +  estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link = var_a / var_p_link
                                 R_r <- var_r / var_p_link
                                 R_f_link <- var_f / var_p_link
                                 # origial scale
-                                if( adjusted) var_p_org <- EY * (exp(sum(VarComps[,"vcov"])) - 1) + 1
-                                if(!adjusted) var_p_org <- EY * (exp(sum(VarComps[,"vcov"] + var_f)) - 1) + 1
+                                if( adjusted) var_p_org <- EY * (exp(sum(var_VarComps)) - 1) + 1
+                                if(!adjusted) var_p_org <- EY * (exp(sum(var_VarComps + var_f)) - 1) + 1
                                 R_org <- EY * (exp(var_a) - 1)/ var_p_org
                                 R_f_org <- EY * (exp(var_f) - 1)/ var_p_org
                         }
                         # check whether that works for any number of var
                         R <- as.data.frame(rbind(R_org, R_link))
-                
+                        
                         # check whether to give out non-repeatability and overdispersion repeatability
                         if (output_resid){
                                 R[,"Residual"] <- c(NA,R_r) # add NA for R_org
@@ -237,7 +246,8 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         }
         
         # run all bootstraps
-        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, grname_org, nboot, parallel, ncores, CI)
+        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, 
+                grname_org, nboot, parallel, ncores, CI, rptObj, update)
         
         # load everything (elegant solution)
         # list2env(bootstraps, envir = e1)
@@ -250,7 +260,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         boot_link <- bootstraps$boot_link
         boot_org <- bootstraps$boot_org
         warnings_boot <- bootstraps$warnings_boot
-
+        
         
         
         ### significance test by permutation of residuals ###
@@ -263,7 +273,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
                 if (link == "sqrt") {
                         y_perm <- stats::rpois(nrow(data), 
                                 (stats::predict(mod_red, type="link") + sample(stats::resid(mod_red)))^2)
-                        }
+                }
                 if (link == "log") {
                         y_perm <- stats::rpois(nrow(data), 
                                 exp(stats::predict(mod_red, type="link") + sample(stats::resid(mod_red))))
@@ -276,14 +286,14 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         
         family <- "poisson"
         permutations <- permut_nongaussian(permut, R_pe, formula, data, dep_var, 
-                                           grname, npermut, parallel, ncores, link, family, R)
+                grname, npermut, parallel, ncores, link, family, R, rptObj, update)
         
         P_permut <- permutations$P_permut
         permut_org <- permutations$permut_org
         permut_link <- permutations$permut_link
         warnings_permut <- permutations$warnings_permut
-     
-
+        
+        
         
         ### likelihood-ratio-test ###
         LRTs <- LRT_nongaussian(formula, data, grname, mod, link, family)
@@ -311,7 +321,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         # delete overdispersion from ngroups
         ngroups <-  unlist(lapply(data[grname], function(x) length(unique(x))))
         ngroups <- ngroups[!names(ngroups) == "Overdispersion"]
-                
+        
         res <- list(call = match.call(), 
                 datatype = "Poisson", 
                 link = link,

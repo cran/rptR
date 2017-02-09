@@ -3,7 +3,7 @@ load("vignette_out.RData")
 
 ## ----package-download, tidy = TRUE, eval=FALSE---------------------------
 #  install.packages("devtools")
-#  devtools::install_github("mastoffel/rptR")
+#  devtools::install_github("mastoffel/rptR", build_vignettes = TRUE)
 
 ## ----package-loading, tidy = TRUE, results='hide'------------------------
 library(rptR)
@@ -19,6 +19,9 @@ rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Ga
 
 ## ----gaussian-full-boot, tidy = TRUE, eval = FALSE-----------------------
 #  rep1 <- rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0)
+
+## ----gaussian-full-boot-update, tidy = TRUE, eval = FALSE----------------
+#  rep1 <- rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Gaussian", nboot=500, npermut=0, update=TRUE, rptOutput=rep1)
 
 ## ----gaussian-print, tidy = TRUE, fig.width=7, fig.height=4--------------
 print(rep1)
@@ -178,4 +181,8 @@ plot(rep14, grname="Residual", scale="link", cex.main=0.8)
 
 ## ----binary-overdisperion-test-print, warning=1, tidy = TRUE, fig.width=7, fig.height=4----
 print(rep15)
+
+## ----gaussian-random-slopes, tidy = TRUE, eval = FALSE-------------------
+#  rep16 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (Treatment + Sex|Population),  grname=c("Population"), data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0, adjusted=FALSE)
+#  print(rep16)
 

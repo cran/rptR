@@ -42,6 +42,12 @@
 #' \item{all_warnings}{\code{list} with two elements. 'warnings_boot' and 'warnings_permut' contain
 #'      warnings from the lme4 model fitting of bootstrap and permutation samples, respectively.}
 #'
+#' 
+#' @details 
+#' 
+#' see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+#' permutation and likelihood-ratio tests.
+#' 
 #' @references 
 #' Carrasco, J. L. & Jover, L.  (2003) \emph{Estimating the generalized 
 #' concordance correlation coefficient through variance components}. Biometrics 59: 849-858.
@@ -87,7 +93,8 @@
 #' 
 
 rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI = 0.95, nboot = 1000, 
-        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs") {
+        npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
+        rptObj = NULL, update = FALSE) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -98,10 +105,10 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         
         # check whether grnames just contain "Residual" or "Overdispersion"
         if (!any((grname != "Residual") & (grname != "Fixed"))) stop("Specify at least one grouping factor in grname")
- 
+        
         # check whether expect is either "meanobs" or "latent" or "liability"
         if (expect != "meanobs" & expect != "latent" & expect != "liability") stop("The argument expect has to be either 'meanobs' (the default), 'latent' or 'liability'")
-               
+        
         # link
         if (length(link) > 1) link <- "logit"
         if (!(link %in% c("logit", "probit"))) stop("Link function has to be 'logit' or 'probit'")
@@ -141,16 +148,20 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         R_pe <- function(formula, data, grname, peYN = FALSE) {
                 
                 mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link))
-                # random effect variance data.frame
-                VarComps <- as.data.frame(lme4::VarCorr(mod))
-                rownames(VarComps) = VarComps$grp                
                 
-                # groups random effect variances
-                var_a <- VarComps[grname, "vcov"]
+                # random effect variance data.frame
+                VarComps <- lme4::VarCorr(mod)
+                
+                # group variances (group_vars is now an internal function in internal.R)
+                var_a <- unlist(lapply(grname, group_vars, VarComps, mod))
                 names(var_a) <- grname
                 
+                # variance of all VarComps
+                var_VarComps <- unlist(lapply(names(VarComps), group_vars, VarComps, mod))
+                names(var_VarComps) <- names(VarComps)
+                
                 # olre variance
-                var_o <- VarComps["Overdispersion", "vcov"]
+                var_o <- var_VarComps["Overdispersion"]
                 # intercept on link scale
                 beta0 <- unname(lme4::fixef(mod)[1])
                 
@@ -159,21 +170,21 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
                 var_f <- stats::var(stats::predict(mod, re.form=NA))
                 
                 if (link == "logit") {
-                        if(expect=="latent") Ep <- stats::plogis(beta0*sqrt(1+((16*sqrt(3))/(15*pi))^2*(sum(VarComps[,"vcov"])+var_f))^-1)
+                        if(expect=="latent") Ep <- stats::plogis(beta0*sqrt(1+((16*sqrt(3))/(15*pi))^2*(sum(var_VarComps)+var_f))^-1)
                         if(expect=="meanobs") Ep <- mean(mod@resp$y, na.rm=TRUE)
                         if(expect=="liability") Ep <- exp(beta0) / (1 + exp(beta0))
                         if(expect=="latent") estdv_link <- 1 / (Ep*(1-Ep))
                         if(expect=="meanobs") estdv_link <- 1 / (Ep*(1-Ep))
                         if(expect=="liability") estdv_link <- pi^2/3
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <-  var_VarComps["Overdispersion"] + estdv_link
                 }
                 if (link == "probit") {
-                        if(expect=="latent") Ep <- stats::pnorm(beta0*sqrt(1+sum(VarComps[,"vcov"])+var_f)^-1)
+                        if(expect=="latent") Ep <- stats::pnorm(beta0*sqrt(1+sum(var_VarComps)+var_f)^-1)
                         if(expect=="meanobs") Ep <- mean(mod@resp$y, na.rm=TRUE)
                         if(expect=="latent") estdv_link <- 2*pi*Ep*(1-Ep) * (exp(inverf(2*Ep-1)^2))^2
                         if(expect=="meanobs") estdv_link <- 2*pi*Ep*(1-Ep) * (exp(inverf(2*Ep-1)^2))^2
                         if(expect=="liability") estdv_link <- 1
-                        var_r <- VarComps["Overdispersion", "vcov"] + estdv_link
+                        var_r <-  var_VarComps["Overdispersion"] + estdv_link
                 }
                 
                 if (ratio == FALSE) {
@@ -194,20 +205,20 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
                 if (ratio == TRUE) {
                         if (link == "logit") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) + estdv_link
+                                var_p_link <- sum(var_VarComps) + estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link <- var_a/ var_p_link
                                 R_r <- var_r / var_p_link
                                 R_f_link <- var_f / var_p_link                                
                                 # origial scale
-                                if(adjusted) var_p_org <- (sum(VarComps[,"vcov"]) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
-                                if(!adjusted) var_p_org <- ((sum(VarComps[,"vcov"])+var_f) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
+                                if(adjusted) var_p_org <- (sum(var_VarComps) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
+                                if(!adjusted) var_p_org <- ((sum(var_VarComps)+var_f) * Ep^2) / ((1 + exp(beta0))^2)+Ep*(1-Ep)
                                 R_org <- ( var_a * Ep^2 / ((1 + exp(stats::qlogis(Ep)))^2)) / var_p_org
                                 R_f_org <- ( var_f * Ep^2/ ((1 + exp(stats::qlogis(Ep)))^2)) / var_p_org
                         }
                         if (link == "probit") {
                                 # link scale
-                                var_p_link <- sum(VarComps[,"vcov"]) + estdv_link
+                                var_p_link <- sum(var_VarComps) + estdv_link
                                 if(!adjusted) var_p_link <- var_p_link + var_f
                                 R_link <- var_a / var_p_link
                                 R_r <- var_r / var_p_link
@@ -218,7 +229,7 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
                         }
                         # check whether that works for any number of var
                         R <- as.data.frame(rbind(R_org, R_link))
-                
+                        
                         # check whether to give out non-repeatability and overdispersion repeatability
                         if (output_resid){
                                 R[,"Residual"] <- c(NA, R_r) # add NA for R_org
@@ -249,7 +260,8 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         }
         
         # run all bootstraps
-        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, grname_org, nboot, parallel, ncores, CI)
+        bootstraps <- bootstrap_nongaussian(bootstr, R_pe, formula, data, Ysim, mod, grname, 
+                grname_org, nboot, parallel, ncores, CI, rptObj, update)
         
         # load everything (elegant solution)
         # list2env(bootstraps, envir = e1)
@@ -263,7 +275,7 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         boot_org <- bootstraps$boot_org
         warnings_boot <- bootstraps$warnings_boot
         
-
+        
         
         ### permutation of residuals ###
         
@@ -274,12 +286,12 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         # defining main permutation function
         if (link == "logit") inv_fun <- stats::plogis
         if (link == "probit") inv_fun <- stats::pnorm
-
+        
         permut <- function(nperm, formula, mod_red, dep_var, grname, data) {
                 # for binom it will be logit 
-                 y_perm <- stats::rbinom(nrow(data), rowSums(dep_var), 
-                                  prob = inv_fun(stats::predict(mod_red, type="link") + 
-                                  sample(stats::resid(mod_red))))
+                y_perm <- stats::rbinom(nrow(data), rowSums(dep_var), 
+                        prob = inv_fun(stats::predict(mod_red, type="link") + 
+                                        sample(stats::resid(mod_red))))
                 data_perm <- data
                 data_perm[names(dep_var)[1]] <- y_perm
                 data_perm[names(dep_var)[2]] <- rowSums(dep_var) - y_perm
@@ -289,7 +301,7 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         
         family <- "binomial"
         permutations <- permut_nongaussian(permut, R_pe, formula, data, dep_var, 
-                                           grname, npermut, parallel, ncores, link, family, R)
+                grname, npermut, parallel, ncores, link, family, R, rptObj, update)
         
         P_permut <- permutations$P_permut
         permut_org <- permutations$permut_org

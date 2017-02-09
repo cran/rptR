@@ -5,7 +5,8 @@
 \title{LMM-based Repeatability Estimation for Gaussian Data}
 \usage{
 rptGaussian(formula, grname, data, CI = 0.95, nboot = 1000, npermut = 0,
-  parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE)
+  parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE,
+  rptObj = NULL, update = FALSE)
 }
 \arguments{
 \item{formula}{Formula as used e.g. by \link{lmer}. The grouping factor(s) of
@@ -29,12 +30,13 @@ and \code{grname} arguments.}
 \item{nboot}{Number of parametric bootstraps for interval estimation 
 (defaults to 1000). Larger numbers of bootstraps give a better
 asymtotic CI, but may be time-consuming. Bootstrapping can be switch off by setting 
-\code{nboot = 0}.}
+\code{nboot = 0}. See also \strong{Details} below.}
 
 \item{npermut}{Number of permutations used when calculating asymptotic p-values 
 (defaults to 0). Larger numbers of permutations give a better
 asymtotic p-values, but may be time-consuming (in particular when multiple grouping factors
-are specified). Permutaton tests can be switch off by setting \code{npermut = 0}.}
+are specified). Permutaton tests can be switch off by setting \code{npermut = 0}. 
+See also \strong{Details} below.}
 
 \item{parallel}{Boolean to express if parallel computing should be applied (defaults to FALSE). 
 If TRUE, bootstraps and permutations will be distributed across multiple cores.}
@@ -51,6 +53,13 @@ If TRUE (the default), the variances explained by fixed effects (if any) will no
 be part of the denominator, i.e. repeatabilities are calculated after controlling for 
 variation due to covariates. If FALSE, the varianced explained by fixed effects (if any) will
 be added to the denominator.}
+
+\item{rptObj}{The output of a rptR function. Can be specified in combination with update = TRUE
+to update bootstraps and permutations}
+
+\item{update}{If TRUE, the rpt object to be updated has to be inputted with the rptObj argument.
+The function just updates the permutations and bootstraps, so make sure to specify all other
+arguments excactly like for the rpt object specified in rptObj.}
 }
 \value{
 Returns an object of class \code{rpt} that is a a list with the following elements: 
@@ -86,6 +95,10 @@ warnings from the lme4 model fitting of bootstrap and permutation samples, respe
 \description{
 Estimates the repeatability from a general linear mixed-effects models fitted by restricted maximum likelihood (REML).
 }
+\details{
+see details section of \code{\link{rpt}} for details on parametric bootstrapping,
+permutation and likelihood-ratio tests.
+}
 \examples{
  
 
@@ -107,7 +120,8 @@ rptGaussian(BodyL ~ (1|Container) + (1|Population), grname=c("Container", "Popul
 rptGaussian(BodyL ~ Sex + Treatment + Habitat + (1|Container) + (1|Population), 
                   grname=c("Container", "Population", "Fixed"), 
                   data=BeetlesBody, nboot=3, npermut=3, adjusted=FALSE)
-               
+                  
+                  
 # two random effects, estimation of variance (instead repeatability)
 R_est <- rptGaussian(formula = BodyL ~ (1|Population) + (1|Container), 
             grname= c("Population", "Container", "Residual"),
@@ -122,8 +136,6 @@ Holger Schielzeth  (holger.schielzeth@uni-jena.de),
 \references{
 Carrasco, J. L. & Jover, L.  (2003) \emph{Estimating the generalized 
 concordance correlation coefficient through variance components}. Biometrics 59: 849-858.
-
-Faraway, J. J. (2006) \emph{Extending the linear model with R}. Boca Raton, FL, Chapman & Hall/CRC.
 
 Nakagawa, S. & Schielzeth, H. (2010) \emph{Repeatability for Gaussian and 
 non-Gaussian data: a practical guide for biologists}. Biological Reviews 85: 935-956

@@ -5,6 +5,15 @@
 #' @param x An rpt object returned from one of the rpt functions
 #' @param \dots Additional arguments; none are used in this method.
 #'
+#' @return 
+#' Abbreviations in the print.rpt output:
+#' \item{R}{Repeatability.}
+#' \item{SE}{Standard error of R.}
+#' \item{CI}{Confidence interval of R derived from parametric bootstrapping.}
+#' \item{P}{P-value}
+#' \item{LRT}{Likelihood-ratio test}
+#' \item{Permutation}{Permutation of residuals}
+#' 
 #' @references 
 #' Nakagawa, S. & Schielzeth, H. (2010) \emph{Repeatability for Gaussian and 
 #'              non-Gaussian data: a practical guide for biologists}. Biological Reviews 85: 935-956
@@ -40,7 +49,7 @@ if (x$ratio == TRUE) {
 
         
         if (x$datatype == "Gaussian") {
-                # cat("\n")
+                cat("\n\n")
                 cat(header_gaussian, "\n\n")
                 for (i in 1:length(x$R)) {
                         cat(header2, names(x$R)[i], "\n",
@@ -63,7 +72,7 @@ if (x$ratio == TRUE) {
         
         
     if (x$datatype == "Poisson" | x$datatype == "Binary" | x$datatype == "Proportion") {
-            # cat("\n")
+            cat("\n\n")
             cat(header_nongaussian, x$link, 
                     "link", "\n\n") 
             # grnames <- names(x$R)
