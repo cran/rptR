@@ -4,7 +4,7 @@
 \alias{rpt}
 \title{Repeatability Estimation for Gaussian and Non-Gaussian Data}
 \usage{
-rpt(formula, grname, data, datatype = c("Gaussian", "Binomial", "Proportion",
+rpt(formula, grname, data, datatype = c("Gaussian", "Binary", "Proportion",
   "count"), link = c("logit", "probit", "log", "sqrt"), CI = 0.95,
   nboot = 1000, npermut = 0, parallel = FALSE, ncores = NULL,
   ratio = TRUE, adjusted = TRUE, expect = "meanobs", rptObj = NULL,
@@ -20,7 +20,7 @@ repeatabilities.}
 name(s) of the grouping factor(s), for which the repeatability should
 be estimated. Spelling needs to match the random effect names as given in \code{formula} 
 and terms have to be set in quotation marks. The reseved terms "Residual", 
-"Overdispersion" and "Fixed" allow the estimation of oversipersion variance, residual 
+"Overdispersion" and "Fixed" allow the estimation of overdispersion variance, residual 
 variance and variance explained by fixed effects, respectively.}
 
 \item{data}{A dataframe that contains the variables included in the \code{formula}

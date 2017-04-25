@@ -140,6 +140,17 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         }
         
         
+        # variables for likelihood-ratio-test / the following code changed position as we test 
+        # whether grname appears in more than one random effect.
+        terms <- attr(terms(formula), "term.labels")
+        randterms <- terms[which(regexpr(" | ", terms, perl = TRUE) > 0)]
+        
+        # at the moment its not possible to fit the same grouping factor in more than one random effect
+        check_modelspecs <- sapply(grname, function(x) sum(grepl(paste0("\\b", x, "\\b"), randterms)))
+        if (any(check_modelspecs > 1)){
+                stop("Fitting the same grouping factor in more than one random 
+                      effect term is not possible at the moment")  
+        }
         
         
         # point estimates of R or var
@@ -303,16 +314,16 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         # significance test by permutation of residuals
         P_permut <- rep(NA, length(grname))
         
-        # significance test by likelihood-ratio-test
-        terms <- attr(terms(formula), "term.labels")
-        randterms <- terms[which(regexpr(" | ", terms, perl = TRUE) > 0)]
-        
-        # at the moment its not possible to fit the same grouping factor in more than one random effect
-        check_modelspecs <- sapply(grname, function(x) sum(grepl(x, randterms)))
-        if (any(check_modelspecs > 1)){
-                stop("Fitting the same grouping factor in more than one random 
-                        effect terms is not possible at the moment")  
-        } 
+        # # significance test by likelihood-ratio-test
+        # terms <- attr(terms(formula), "term.labels")
+        # randterms <- terms[which(regexpr(" | ", terms, perl = TRUE) > 0)]
+        # 
+        # # at the moment its not possible to fit the same grouping factor in more than one random effect
+        # check_modelspecs <- sapply(grname, function(x) sum(grepl(x, randterms)))
+        # if (any(check_modelspecs > 1)){
+        #         stop("Fitting the same grouping factor in more than one random 
+        #                 effect term is not possible at the moment")  
+        # } 
         
         # no permutation test
         if (npermut == 1) {
@@ -396,27 +407,37 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
         
         
         ## likelihood-ratio-test
-        LRT_mod <- as.numeric(stats::logLik(mod))
+        
+        ## If the reduced model does not have random effects anymore, the LRT for the full
+        ## model must be fitted with ML instead of REML
+        LRT_mod <- ifelse(length(randterms) == 1, as.numeric(stats::logLik(stats::update(mod, REML=FALSE))), as.numeric(stats::logLik(mod)))
+        
         # k*(k-1)/2+k
         # check_rs <- sum(unlist(lapply(VarComps[grname], function(x) sum(dim(x)) > 2)))
         
         # calculate df for random slopes
         VarComps <- lme4::VarCorr(mod)
         mat_dims <- unlist(lapply(VarComps[grname], ncol))
-        calc_df <- function(k){
+        calc_df <- function(k, k_names){
                 if (k == 1) df <- 1
                 if (k > 1){
                         terms <- attr(terms(formula), "term.labels")
-                        current_term <- terms[grep(names(k), terms)]
-                        if (grep("0", current_term)){
-                                df <- (k*(k-1)/2+k) - 1    
-                        } else {
+                        current_term <- terms[grep(k_names, terms)]
+                        # no 0 will occur in the formula, as we are currently not allowing
+                        # to seperate random intercepts and random slopes for a given grouping variable
+                        
+                        # the 0 case is just necessary when we allow fitting random intercepts
+                        # and random slopes seperately without estimating correlations.
+                       # if (regexpr("0", current_term)>0){
+                        #        df <- (k*(k-1)/2+k) - 1    
+                        #} else {
                                 df <- k*(k-1)/2+k  
-                        }
+                        #}
                 } 
                 df
         }
-        LRT_df <- sapply(mat_dims, calc_df) 
+
+        LRT_df <- mapply(calc_df, mat_dims, names(mat_dims)) 
         
         # preassign
         for (i in c("LRT_P", "LRT_D", "LRT_red")) assign(i, rep(NA, length(grname)))
@@ -431,8 +452,8 @@ rptGaussian <- function(formula, grname, data, CI = 0.95, nboot = 1000,
                 LRT_D[i] <- as.numeric(-2 * (LRT_red[i] - LRT_mod))
                 LRT_P[i] <- ifelse(LRT_D[i] <= 0, 1, stats::pchisq(LRT_D[i], LRT_df[i], lower.tail = FALSE)) 
         }
-        # division by 2 if LRT_df = 1
-        LRT_P <- LRT_P/ifelse(LRT_df==1,2,1)
+        # division by 2 if LRT_df = 1 and LRT_D > 0
+        LRT_P <- LRT_P/ifelse(LRT_df==1 & LRT_D > 0,2,1)
         
         LRT_table <- data.frame(logL_red = LRT_red, LR_D = LRT_D, LRT_P = LRT_P, LRT_df =  LRT_df, stringsAsFactors = FALSE)
         row.names(LRT_table) <- grname

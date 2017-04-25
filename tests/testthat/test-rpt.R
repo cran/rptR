@@ -37,3 +37,6 @@ test_that("wrapper function rpt works for all distributions with perm and boot a
         expect_error(rpt(cbind(Dark, Reddish) ~ (1|Population), grname=c("Population"), data=md,
                 nboot=2, npermut=2, datatype = "Proportion"), NA)
 })
+
+
+

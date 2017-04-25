@@ -1,12 +1,18 @@
 ## ---- echo=FALSE, hide = TRUE--------------------------------------------
 load("vignette_out.RData")
 
-## ----package-download, tidy = TRUE, eval=FALSE---------------------------
+## ----package-download-cran, tidy = TRUE, eval=FALSE----------------------
+#  install.packages("rptR")
+
+## ----package-download-github, tidy = TRUE, eval=FALSE--------------------
 #  install.packages("devtools")
 #  devtools::install_github("mastoffel/rptR", build_vignettes = TRUE)
 
 ## ----package-loading, tidy = TRUE, results='hide'------------------------
 library(rptR)
+
+## ----citation, tidy = TRUE, results='hide'-------------------------------
+citation("rptR")
 
 ## ----data-preparation-gaussian, tidy = TRUE, fig.width=7, fig.height=3----
 data(BeetlesBody)
@@ -21,7 +27,7 @@ rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Ga
 #  rep1 <- rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0)
 
 ## ----gaussian-full-boot-update, tidy = TRUE, eval = FALSE----------------
-#  rep1 <- rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Gaussian", nboot=500, npermut=0, update=TRUE, rptOutput=rep1)
+#  rep1 <- rpt(BodyL ~ (1|Population),  grname="Population", data=BeetlesBody, datatype="Gaussian", nboot=500, npermut=0, update=TRUE, rptObj=rep1)
 
 ## ----gaussian-print, tidy = TRUE, fig.width=7, fig.height=4--------------
 print(rep1)
@@ -54,8 +60,8 @@ plot(rep3, grname="Population", type="boot", cex.main=0.8)
 ## ----gaussian-containeronly-randeff, tidy = TRUE, eval = FALSE-----------
 #  rep4 <- rpt(BodyL ~ (1|Container),  grname="Container", data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0)
 
-## ----gaussian-containeronly-randeff-print, tidy = TRUE, eval = FALSE-----
-#  print(rep4)
+## ----gaussian-containeronly-randeff-print, tidy = TRUE, eval = TRUE------
+print(rep4)
 
 ## ----gaussian-adjusted, tidy = TRUE, eval = FALSE------------------------
 #  rep5 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (1|Population),  grname=c("Container", "Population"), data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0)
@@ -65,18 +71,18 @@ print(rep5)
 plot(rep5, type="boot", grname="Container", cex.main=0.8)
 plot(rep5, type="boot", grname="Population", cex.main=0.8)
 
-## ----gaussian-enhanced-unadjusted, tidy = TRUE, eval = FALSE-------------
+## ----gaussian-enhanced-agreement, tidy = TRUE, eval = FALSE--------------
 #  rep6 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (1|Population),  grname=c("Container", "Population"), data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0, adjusted=FALSE)
 
-## ----gaussian-enhanced-unadjusted-print, tidy = TRUE---------------------
+## ----gaussian-enhanced-agreement-print, tidy = TRUE----------------------
 print(rep6)
 
 ## ----gaussian-r2, tidy = TRUE, eval = FALSE------------------------------
 #  rep7 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (1|Population),  grname=c("Container", "Population", "Fixed"), data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0, adjusted=FALSE)
 
-## ----gaussian-r2-plot, tidy = TRUE, fig.width=7, fig.height=4, eval = FALSE----
-#  print(rep7)
-#  plot(rep7, grname="Fixed", type="boot")
+## ----gaussian-r2-plot, tidy = TRUE, fig.width=7, fig.height=4, eval = TRUE----
+print(rep7)
+plot(rep7, grname="Fixed", type="boot")
 
 ## ----data-loading-poisson, tidy = TRUE, fig.width=7----------------------
 data(BeetlesFemale)
@@ -94,11 +100,11 @@ plot(rep8, grname="Population", scale="link", cex.main=0.8)
 plot(rep8, grname="Container", scale="original", cex.main=0.8)
 plot(rep8, grname="Population", scale="original", cex.main=0.8)
 
-## ----poisson-enhanced-unadjusted, tidy = TRUE, eval = FALSE--------------
+## ----poisson-enhanced-agreement, tidy = TRUE, eval = FALSE---------------
 #  rep9 <- rpt(Egg ~ Treatment + (1|Container) + (1|Population),  grname=c("Container", "Population", "Fixed"),  data=BeetlesFemale, datatype="Poisson", nboot=1000, npermut=0, adjusted=FALSE)
 #  print(rep9)
 
-## ----poisson-enhanced-unadjusted-print, tidy = TRUE----------------------
+## ----poisson-enhanced-agreement-print, tidy = TRUE-----------------------
 print(rep9)
 
 ## ----data-loading-binary, tidy = TRUE, fig.width=7-----------------------
@@ -111,10 +117,10 @@ table(c("dark","reddish")[BeetlesMale$Colour+1])
 ## ----binary-model-print, warning=1, tidy = TRUE, fig.width=7, fig.height=4----
 print(rep10)
 
-## ----binary-enhaned-unadjusted, tidy = TRUE, fig.width=3.2, fig.show='hold', eval = FALSE----
+## ----binary-enhaned-agreement, tidy = TRUE, fig.width=3.2, fig.show='hold', eval = FALSE----
 #  rep11 <- rpt(Colour ~ Treatment + (1|Container) + (1|Population),  grname=c("Container", "Population", "Fixed"), data=BeetlesMale, datatype="Binary", nboot=1000, npermut=0, adjusted=FALSE)
 
-## ----binary-enhaned-unadjusted-plot, tidy = TRUE, fig.width=3.2, fig.show='hold'----
+## ----binary-enhaned-agreement-plot, tidy = TRUE, fig.width=3.2, fig.show='hold'----
 print(rep11)
 plot(rep11, grname="Population", scale="link", cex.main=0.8)
 plot(rep11, grname="Population", scale="original", cex.main=0.8)
@@ -183,6 +189,8 @@ plot(rep14, grname="Residual", scale="link", cex.main=0.8)
 print(rep15)
 
 ## ----gaussian-random-slopes, tidy = TRUE, eval = FALSE-------------------
-#  rep16 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (Treatment + Sex|Population),  grname=c("Population"), data=BeetlesBody, datatype="Gaussian", nboot=1000, npermut=0, adjusted=FALSE)
-#  print(rep16)
+#  rep16 <- rpt(BodyL ~ Treatment + Sex + (1|Container) + (Treatment + Sex|Population),  grname=c("Population"), data=BeetlesBody, datatype="Gaussian", nboot=500, npermut=0, adjusted=FALSE)
+
+## ----gaussian-random-slopes-print, warning=1, tidy = TRUE, eval = TRUE----
+summary(rep16)
 
