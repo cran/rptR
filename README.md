@@ -16,6 +16,8 @@ rptR
     browseVignettes("rptR")
 ```
 
-### Reference
+### Citation
 
-Stoffel, M., Nakagawa, S. & Schielzeth, H. (2017) rptR: Repeatability estimation and variance decomposition by generalized linear mixed-effects models. Methods Ecol Evol. Accepted Author Manuscript. doi:10.1111/2041-210X.12797
+Stoffel, M. A., Nakagawa, S. and Schielzeth, H. (2017), rptR: repeatability estimation and variance decomposition by generalized linear mixed-effects models. Methods Ecol Evol. 8: 1639-1644.
+
+[![doi](https://img.shields.io/badge/doi-10.1111/2041--210X.12797-green.svg?style=flat)](http://dx.doi.org/10.1111/2041-210X.12797)
