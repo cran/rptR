@@ -4,12 +4,24 @@
 \alias{rptGaussian}
 \title{LMM-based Repeatability Estimation for Gaussian Data}
 \usage{
-rptGaussian(formula, grname, data, CI = 0.95, nboot = 1000,
-  npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE,
-  adjusted = TRUE, rptObj = NULL, update = FALSE)
+rptGaussian(
+  formula,
+  grname,
+  data,
+  CI = 0.95,
+  nboot = 1000,
+  npermut = 0,
+  parallel = FALSE,
+  ncores = NULL,
+  ratio = TRUE,
+  adjusted = TRUE,
+  rptObj = NULL,
+  update = FALSE,
+  ...
+)
 }
 \arguments{
-\item{formula}{Formula as used e.g. by \link{lmer}. The grouping factor(s) of
+\item{formula}{Formula as used e.g. by \link[lme4]{lmer}. The grouping factor(s) of
 interest needs to be included as a random effect, e.g. '(1|groups)'.
 Covariates and additional random effects can be included to estimate adjusted 
 repeatabilities.}
@@ -60,6 +72,8 @@ to update bootstraps and permutations}
 \item{update}{If TRUE, the rpt object to be updated has to be inputted with the rptObj argument.
 The function just updates the permutations and bootstraps, so make sure to specify all other
 arguments excactly like for the rpt object specified in rptObj.}
+
+\item{...}{Other parameters for the lmer or glmer call, such as optimizers.}
 }
 \value{
 Returns an object of class \code{rpt} that is a a list with the following elements: 

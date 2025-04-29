@@ -94,7 +94,7 @@
 
 rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95, nboot = 1000, 
         npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
-        rptObj = NULL, update = FALSE) {
+        rptObj = NULL, update = FALSE, ...) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -115,9 +115,9 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         
         # observational level random effect
         Overdispersion <- factor(1:nrow(data))
-        data <- cbind(data, Overdispersion)
+        data$Overdispersion <- Overdispersion
         formula <- stats::update(formula,  ~ . + (1|Overdispersion))
-        mod <- lme4::glmer(formula, data = data, family = stats::poisson(link = link))
+        mod <- lme4::glmer(formula, data = data, family = stats::poisson(link = link), ...)
         
         if (nboot == 1) {
                 warning("nboot has to be greater than 1 to calculate a CI and has been set to 0")
@@ -159,7 +159,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         R_pe <- function(formula, data, grname, peYN = FALSE) {
                 
                 # mod <- suppressWarnings(lme4::glmer(formula = formula, data = data, family = stats::poisson(link = link)))
-                mod <- lme4::glmer(formula = formula, data = data, family = stats::poisson(link = link))
+                mod <- lme4::glmer(formula = formula, data = data, family = stats::poisson(link = link), ...)
                 
                 # groups random effect variances
                 VarComps <- lme4::VarCorr(mod)
@@ -279,7 +279,7 @@ rptPoisson <- function(formula, grname, data, link = c("log", "sqrt"), CI = 0.95
         ### significance test by permutation of residuals ###
         
         # response variable
-        dep_var <- as.character(formula)[2]
+        dep_var <- as.character(unclass(formula))[2]
         
         #  main permutation function
         permut <- function(nperm, formula, mod_red, dep_var, grname, data) {

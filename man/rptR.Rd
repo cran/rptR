@@ -2,8 +2,8 @@
 % Please edit documentation in R/rptR.R
 \docType{package}
 \name{rptR}
-\alias{rptR}
 \alias{rptR-package}
+\alias{rptR}
 \title{rptR: Repeatability Estimation for Gaussian and Non-Gaussian data}
 \description{
 A collection of functions for calculating point estimates, interval estimates and 
@@ -49,6 +49,14 @@ mixed-effects models.}. Methods Ecol Evol. Accepted Author Manuscript. doi:10.11
 \references{
 Nakagawa, S. & Schielzeth, H. (2010) \emph{Repeatability for Gaussian and
   non-Gaussian data: a practical guide for biologists}. Biological Reviews 85: 935-956
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/mastoffel/rptR}
+  \item Report bugs at \url{https://github.com/mastoffel/rptR/issues}
+}
+
 }
 \author{
 Martin Stoffel (martin.adam.stoffel@gmail.com), Shinichi Nakagawa

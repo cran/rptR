@@ -21,7 +21,7 @@
 #'      (in this order).}
 #' \item{se}{\code{data.frame} with approximate standard errors (\emph{se}) for repeatabilities. Columns
 #'      are groups of interest. Rows are original and link scale (in this order).
-#'      Note that the distribution might not be symmetrical, in which case the emph{se} is less informative.}
+#'      Note that the distribution might not be symmetrical, in which case the \emph{se} is less informative.}
 #' \item{CI_emp}{\code{list} of two elements containing the confidence intervals for repeatabilities 
 #'      on the link and original scale, respectively. Within each list element, lower and upper CI
 #'      are columns and each row for each grouping factor of interest.}
@@ -63,7 +63,7 @@
 #' non-Gaussian data: a practical guide for biologists}. Biological Reviews 85: 935-956
 #' 
 #' @author Holger Schielzeth  (holger.schielzeth@@uni-jena.de),
-#'         Shinichi Nakagawa (s.nakagawa@unsw.edu.au) &
+#'         Shinichi Nakagawa (s.nakagawa@@unsw.edu.au) &
 #'         Martin Stoffel (martin.adam.stoffel@@gmail.com)
 #'      
 #' @seealso \link{rpt}
@@ -97,7 +97,7 @@
 
 rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0.95, nboot = 1000, 
         npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
-        rptObj = NULL, update = FALSE) {
+        rptObj = NULL, update = FALSE, ...) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -121,7 +121,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         if (!(link %in% c("logit", "probit"))) stop("Link function has to be 'logit' or 'probit'")
         
         # note: no Overdispersion for binary data. 
-        mod <- lme4::glmer(formula, data = data, family = stats::binomial(link = link))
+        mod <- lme4::glmer(formula, data = data, family = stats::binomial(link = link), ...)
         
         # check for random slopes
         VarComps <- lme4::VarCorr(mod)
@@ -173,7 +173,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         # point estimates of R
         R_pe <- function(formula, data, grname) {
                 
-                mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link))
+                mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link), ...)
                 
                 # mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link))
                 # random effect variance data.frame
@@ -327,7 +327,7 @@ rptBinary <- function(formula, grname, data, link = c("logit", "probit"), CI = 0
         ### significance test by permutation of residuals ###
         
         # response variable
-        dep_var <- as.character(formula)[2]
+        dep_var <- as.character(unclass(formula))[2]
         
         # significance test by permutation of residuals
         

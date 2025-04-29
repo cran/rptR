@@ -94,7 +94,7 @@
 
 rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI = 0.95, nboot = 1000, 
         npermut = 0, parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect="meanobs",
-        rptObj = NULL, update = FALSE) {
+        rptObj = NULL, update = FALSE, ...) {
         
         # missing values
         no_NA_vals <- stats::complete.cases(data[all.vars(formula)])
@@ -114,10 +114,10 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         if (!(link %in% c("logit", "probit"))) stop("Link function has to be 'logit' or 'probit'")
         # observational level random effect
         Overdispersion <- factor(1:nrow(data))
-        data <- cbind(data, Overdispersion)
+        data$Overdispersion <- Overdispersion
         
         formula <- stats::update(formula,  ~ . + (1|Overdispersion))
-        mod <- lme4::glmer(formula, data = data, family = stats::binomial(link = link))
+        mod <- lme4::glmer(formula, data = data, family = stats::binomial(link = link), ...)
         
         if (nboot < 0) nboot <- 0
         if (npermut < 1) npermut <- 1
@@ -158,7 +158,7 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         # point estimates of R
         R_pe <- function(formula, data, grname, peYN = FALSE) {
                 
-                mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link))
+                mod <- lme4::glmer(formula = formula, data = data, family = stats::binomial(link = link), ...)
                 
                 # random effect variance data.frame
                 VarComps <- lme4::VarCorr(mod)
@@ -291,7 +291,7 @@ rptProportion <- function(formula, grname, data, link = c("logit", "probit"), CI
         ### permutation of residuals ###
         
         # response matrix for permutation test
-        dep_var_expr <- as.character(formula)[2]
+        dep_var_expr <- as.character(unclass(formula))[2]
         dep_var <- as.data.frame(with(data, eval(parse(text=dep_var_expr))))
         
         # defining main permutation function

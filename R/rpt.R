@@ -4,7 +4,7 @@
 #' models fitted by restricted maximum likelihood (REML). Calls 
 #' specialised functions depending of the choice of datatype and method.
 #' 
-#' @param formula Formula as used e.g. by \link{lmer}. The grouping factor(s) of
+#' @param formula Formula as used e.g. by \link[lme4]{lmer}. The grouping factor(s) of
 #'        interest needs to be included as a random effect, e.g. '(1|groups)'.
 #'        Covariates and additional random effects can be included to estimate adjusted 
 #'        repeatabilities.
@@ -58,6 +58,7 @@
 #' @param update If TRUE, the rpt object to be updated has to be inputted with the rptObj argument.
 #'        The function just updates the permutations and bootstraps, so make sure to specify all other
 #'        arguments excactly like for the rpt object specified in rptObj. 
+#' @param ... Other parameters for the lmer or glmer call, such as optimizers.
 #'   
 #' @details 
 #' For \code{datatype='Gaussian'} calls function \link{rptGaussian},  
@@ -154,25 +155,25 @@
 rpt <- function(formula, grname, data, datatype = c("Gaussian", "Binary", "Proportion", 
     "Poisson"), link = c("logit", "probit", "log", "sqrt"), CI = 0.95, nboot = 1000, npermut = 0,
     parallel = FALSE, ncores = NULL, ratio = TRUE, adjusted = TRUE, expect = "meanobs",
-    rptObj = NULL, update = FALSE) {
+    rptObj = NULL, update = FALSE, ...) {
         
     if (datatype == "Gaussian") {
-            out_gaussian <- rptGaussian(formula, grname, data, CI, nboot, npermut, parallel, ncores, ratio, adjusted, rptObj, update)
+            out_gaussian <- rptGaussian(formula, grname, data, CI, nboot, npermut, parallel, ncores, ratio, adjusted, rptObj, update, ...)
             out_gaussian$call <- match.call()
             return(out_gaussian)
     }
     if (datatype == "Binary") {
-            out_binary <- rptBinary(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update)
+            out_binary <- rptBinary(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update, ...)
             out_binary$call <- match.call()
             return(out_binary)
     }
     if (datatype == "Proportion") {
-            out_proportion <- rptProportion(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update)
+            out_proportion <- rptProportion(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update, ...)
             out_proportion$call <- match.call()
             return(out_proportion)
     }
     if (datatype == "Poisson") {
-            out_poisson <- rptPoisson(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update)
+            out_poisson <- rptPoisson(formula, grname, data, link, CI, nboot, npermut, parallel, ncores, ratio, adjusted, expect, rptObj, update, ...)
             out_poisson$call <- match.call()
             return(out_poisson)
     }
