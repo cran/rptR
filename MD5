@@ -1,7 +1,7 @@
-e8b3d1fd74a79645b1bdf4712507d256 *DESCRIPTION
+1950cd9d75679f62f336a905c458b4a3 *DESCRIPTION
 9e51b6b168ba2d1a802e712d77a0c1e2 *LICENSE
 67076b87177952aea554fb88f8cd2a34 *NAMESPACE
-6e664c64666ddc60314f793a47defc2f *NEWS.md
+d7e2355ca9cce67d9b7e9a7605535d2f *NEWS.md
 e638d3a82392a7c7e85f60358a8d5e77 *R/BeetlesBody.R
 00a458150b047bfe397bd12c394dedab *R/BeetlesFemale.R
 ab64406dc2eb689563ff59d08af34db3 *R/BeetlesMale.R
@@ -24,7 +24,7 @@ b21f75767a1b9a2e2e32ed1d8a8e0255 *data/BeetlesFemale.rda
 27f64fabc75b46da67dbb1213be80d7f *inst/CITATION
 87cde6253eec2dbfa6639b52cd3660a5 *inst/doc/rptR.R
 d52c141e55ac3ed0a2ac39880fc2010a *inst/doc/rptR.Rmd
-d042f182ab4bdbb640b912c4e2fb17ae *inst/doc/rptR.html
+b6a235120ec5e0a9492df34746209c34 *inst/doc/rptR.html
 c72b35f7c33164ba100687dc38275292 *man/BeetlesBody.Rd
 3ef7a8d3b2567ce3a6adcbd52b434ea0 *man/BeetlesFemale.Rd
 96ea12c9135fc3839aef8bfe16f1a53e *man/BeetlesMale.Rd
@@ -47,8 +47,8 @@ d2d7b87f44ca6beb09d3a432734fd22c *tests/testthat.R
 859b17f6dd4b056ad9615c82c42f2af9 *tests/testthat/test-rpt.R
 af782aecf34c9716aeebdaedde8e5fbd *tests/testthat/test-rptBinary.R
 3d65dc73bcfd839d803adbf8a03d42b2 *tests/testthat/test-rptGaussian.R
-ce82a794fc34b48740fab9a596f47660 *tests/testthat/test-rptPoisson.R
-54179907c3e6b6aefc1b0717782ffead *tests/testthat/test-rptProportion.R
+4bfd39859264c75ffbb7961722fed670 *tests/testthat/test-rptPoisson.R
+970822d8485cd40283057b9266335ccf *tests/testthat/test-rptProportion.R
 f20eae7b437d08574e8e43b8197e35d7 *tests/testthat/test-summary.rpt.R
 d52c141e55ac3ed0a2ac39880fc2010a *vignettes/rptR.Rmd
 ce8f0eecba36f1883f93308e07b1f50d *vignettes/vignette_out.RData

@@ -1,8 +1,8 @@
 Package: rptR
 Title: Repeatability Estimation for Gaussian and Non-Gaussian Data
-Version: 0.9.23
+Version: 0.9.24
 Depends: R (>= 3.2.1)
-Date: 2025-04-29
+Date: 2026-11-16
 Authors@R: c(
         person("Martin", "Stoffel", email = "martin.adam.stoffel@gmail.com", role = c("aut", "cre")),
         person("Shinichi", "Nakagawa", role = "aut"),
@@ -17,10 +17,10 @@ VignetteBuilder: knitr
 URL: https://github.com/mastoffel/rptR
 BugReports: https://github.com/mastoffel/rptR/issues
 NeedsCompilation: no
-Packaged: 2025-04-29 10:08:42 UTC; msto
+Packaged: 2026-11-16 10:38:59 UTC; msto
 Author: Martin Stoffel [aut, cre],
   Shinichi Nakagawa [aut],
   Holger Schielzeth [aut]
 Maintainer: Martin Stoffel <martin.adam.stoffel@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-04-29 12:40:02 UTC
+Date/Publication: 2026-11-20 07:30:02 UTC
